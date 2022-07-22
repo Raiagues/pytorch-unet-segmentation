@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 from typing import Tuple
-
+import time
 import numpy as np
 
 import torch
@@ -132,6 +132,7 @@ def _print_stats(epoch: int,
 
 def _load_model(params: TrainingParams) -> Tuple[Unet, int]:
     checkpoint = params.checkpoint
+    iteracoes = 0
     if checkpoint is not None:
         filename = os.path.basename(checkpoint)
         iteration_offset = int(os.path.splitext(filename)[0].split('_')[-1])
@@ -141,10 +142,12 @@ def _load_model(params: TrainingParams) -> Tuple[Unet, int]:
         )
         unet = torch.load(checkpoint)
     else:
-        print('Initializing model from scratch')
+        print('Initializing model from scratch'
+            f'quantidade de iterações {iteracoes}')
         unet = Unet(n_channels=params.n_channels, n_classes=params.n_classes)
         unet.apply(initialize_weights)
         iteration_offset = 0
+        iteracoes += 1
 
     return unet, iteration_offset
 
@@ -160,7 +163,7 @@ def _initialize_writers(params: TrainingParams) -> Tuple[SummaryWriter, SummaryW
 
 
 def fit(params: TrainingParams) -> None:
-
+    tempo_total = 0
     unet, iteration_offset = _load_model(params)
     optimizer = torch.optim.SGD(
         unet.parameters(), lr=params.lr, momentum=params.momentum)
@@ -174,7 +177,8 @@ def fit(params: TrainingParams) -> None:
     stats = MovingStats()
 
     for epoch in range(params.n_epochs):
-
+        start_time = time.time()
+        print(f'{epoch} de {params.n_epochs}')
         for batch_idx, (imgs, masks) in enumerate(params.train_loader):
 
             # Configure batch data
@@ -188,7 +192,9 @@ def fit(params: TrainingParams) -> None:
                                          optimizer=optimizer,
                                          params=params)
             stats.update(training_stats.loss, training_stats.iou_value)
-
+            tempo_total += (time.time()-start_time)
+            print(f'Tempo gasto para iteração {iteration}: {(time.time()-start_time):.2} segundos\n'
+                  f'Tempo gasto total {tempo_total} segundos \n')
             if iteration % params.stats_interval == 0 \
                     and iteration != iteration_offset:
                 # Replace step metrics with moving metrics
